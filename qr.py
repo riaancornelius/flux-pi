@@ -5,6 +5,7 @@ import numpy as np
 import subprocess
 import re
 import time
+#import zbar
 from jira import JiraTicketSearch
 from jira import JiraTicket
 from datetime import datetime
@@ -37,18 +38,37 @@ def scan_qr_code(_qr_name):
     result = None
     try:
         result = subprocess.check_output([ZBAR_PATH, "-q", _qr_name])
+        """
+        cv_img = cv2.cv.LoadImageM(_qr_name, cv2.cv.CV_LOAD_IMAGE_GRAYSCALE)
+        width = cv_img.width
+        height = cv_img.height
+        raw = cv_img.tostring()
+        print 'scanning'
+        scanner = zbar.ImageScanner()
+        scanner.parse_config('enable')
+        image = zbar.Image(width, height, 'Y800', raw)
+        scanner.scan(image)
+        print 'done scanning'
+        print image
+        for symbol in image:
+            result = "QR-Code:" + symbol.data
+            print symbol.data
+            #print 'decoded', symbol.type, 'symbol', '"%s"' % symbol.data
+        del(image)
+        """
     except:
-        print "  Error while scanning potential QR Code: " + qr_name
+        print "  Error while scanning potential QR Code: " + _qr_name
         result = None
     return result
 
 
 def get_id_from_qr_code_scan_result(possible_qr_id):
-    print "possible QR Code found: " + possible_qr_id
-    p = re.compile("QR-Code:(.+)", re.IGNORECASE)
-    match = p.match(possible_qr_id)
-    if match:
-        return match.group(1).strip()
+    if possible_qr_id is not None:
+        print "possible QR Code found: " + possible_qr_id
+        p = re.compile("QR-Code:(.+)", re.IGNORECASE)
+        match = p.match(possible_qr_id)
+        if match:
+            return match.group(1).strip()
         
 
 ##Resize with resize command
@@ -57,7 +77,7 @@ def resize_image(img0, ratio):
     return dst
 
 
-def process_contours(_contours, _hierarchy=None, _frame=None, draw_contours=1):
+def process_contours(_contours, _hierarchy=None, _frame=None, _minMoment=1000, draw_contours=1):
     squares = []
     for idx, contour in enumerate(_contours):
         moment = cv2.moments(contour)
@@ -65,7 +85,7 @@ def process_contours(_contours, _hierarchy=None, _frame=None, draw_contours=1):
         if _hierarchy is not None and _hierarchy[0, idx, 3] > -1:
             should_count = False
             print "Hierarchy for " + str(idx) + " was: " + str(_hierarchy[0, idx, 3])
-        if should_count is True and moment["m00"] > 1000:
+        if should_count is True and moment["m00"] > _minMoment:
             bounding_box = cv2.boundingRect(contour)
             orig_rect = cv2.minAreaRect(contour)
             rect = ((orig_rect[0][0], orig_rect[0][1]), (orig_rect[1][0], orig_rect[1][1]), orig_rect[2])
@@ -113,7 +133,7 @@ def main():
         #os.system("raspistill -w 2592 -h 1944 -ex verylong -o " + OUTPUT_PATH + IMAGE_NAME + IMAGE_EXT)
 
         ##Load image
-        #frame = cv2.imread(OUTPUT_PATH)
+        #frame = cv2.imread(OUTPUT_PATH + IMAGE_NAME + IMAGE_EXT)
         frame = cv2.imread(OUTPUT_PATH + IMAGE_NAME + str(loop_run_count) + IMAGE_EXT)
         if frame is None:
             frame = cv2.imread(OUTPUT_PATH + IMAGE_NAME + IMAGE_EXT)
@@ -129,7 +149,7 @@ def main():
 
         ##Find outer squares using contours
         contours, hierarchy = cv2.findContours(separated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        outerSquares, tmp = process_contours(contours, None, frame, 0)
+        outerSquares, tmp = process_contours(contours, None, frame, 1000, 0)
 
         #print "idx: " + str(idx)
         print "Found squares to check: " + str(len(outerSquares))
@@ -150,7 +170,7 @@ def main():
             separated_tmp = cv2.inRange(thresh_tmp, lower, upper)
 
             contours_tmp, hierarchy_tmp = cv2.findContours(separated_tmp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            innerSquares, drawnFrame = process_contours(contours_tmp, hierarchy, thresh_tmp, 1)
+            innerSquares, drawnFrame = process_contours(contours_tmp, hierarchy, thresh_tmp, 10, 1)
             #cv2.imwrite("aa_marked_"+str(idx_s)+'.png', drawnFrame)
             #print str(idx_s) + " contained " + str(len(innerSquares)) + " squares"
             if len(innerSquares) >= 3:
@@ -196,11 +216,6 @@ def main():
 
         cv2.waitKey(0)
 
-        loop_run_count += 1
-        print 'Run complete. Going to sleep now'
-        time.sleep(60)  # Delay for 1 minute (60 seconds)
-
-"""
         font = cv2.FONT_HERSHEY_SIMPLEX
 
         for idx_qr, (ticket_id, location) in enumerate(qr_codes_with_pos):
@@ -214,18 +229,17 @@ def main():
 
         ##Resize image
         frame = resize_image(frame, 0.42)
-        thresh = resize_image(thresh, 0.25)
+        thresh = resize_image(thresh, 0.4)
         ##Show Images
-        cv2.imshow("thresh", thresh)
+        #cv2.imshow("thresh", thresh)
         cv2.imshow("frame", frame)
         #display_image(frame)
 
         cv2.waitKey(0)
 
         loop_run_count += 1
-        time.sleep(1)  # Delay for 1 minute (60 seconds)
+        time.sleep(1)  # Delay for 1 second when showing windows
         cv2.destroyAllWindows()
-"""
 
 if __name__ == "__main__":
     main()

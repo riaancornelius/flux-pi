@@ -12,6 +12,7 @@ class JiraTicket(object):
         self.status = status
 
     def update_online(self):
+        print ''
         print 'Updating ' + self.key + ': ' + self.status
         headers = {'content-type': 'application/json'}
         url = jira_url + 'issue/' + self.key + '/transitions'
